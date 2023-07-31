@@ -91,15 +91,34 @@ predictors <- c(
   "eGFRCDKEPI2021"
 )
 # 1) univariate plot
+df.sep <- reshape2::melt(dfC[, c(outcome, predictors)], id = outcome)
+df.sep[[outcome]] <- as.factor(df.sep[[outcome]])
+df.sep$outcome <- df.sep[[outcome]]
+color.grp <- c("1" = "red", "0" = "blue")
+print(table(df.sep$outcome))
+fig.uni <- ggplot2::ggplot(df.sep, ggplot2::aes(x = outcome, y = value, fill = outcome)) +
+  ggplot2::geom_violin() +
+  ggpubr::stat_compare_means(label = "p.signif") +
+  ggplot2::geom_jitter(shape = 21, size = 1.5, alpha = 0.6) +
+  ggplot2::scale_fill_manual(values = color.grp) +
+  ggplot2::facet_wrap(~variable, nrow = 3, scales = "free")
+
+fname <- "figs/univar.pdf"
+ggplot2::ggsave(fname, fig.uni,
+  width = 12,
+  height = 8,
+  dpi = 300
+)
+stop()
 # 2) feature selection
 sel.feats <- select_feats(dfC, outcome, predictors)
 print(sel.feats)
 
 # 3) fitting model
-fit.model <- classifier(df, outcome, sel.feats)
+fit.model <- classifier(dfC, outcome, sel.feats)
 
 # 4.1) evaluate model: ROC curve
-fig.roc <- plot.roc(fit.model, df, outcome)
+fig.roc <- plot.roc(fit.model, dfC, outcome)
 fname <- "figs/roc.pdf"
 ggplot2::ggsave(fname, fig.roc,
   width = 4,
@@ -108,7 +127,7 @@ ggplot2::ggsave(fname, fig.roc,
 )
 
 # 4.2) evaluate model: precision-recall curve
-fig.prc <- plot.prc(fit.model, df, outcome)
+fig.prc <- plot.prc(fit.model, dfC, outcome)
 fname <- "figs/precision_recall.pdf"
 ggplot2::ggsave(fname, fig.prc,
   width = 4,
