@@ -61,6 +61,8 @@ dfC[, non_binary_columns] <-
     ifelse(is.na(x), mean(x, na.rm = TRUE), x)
   })
 dfC <- na.omit(dfC)
+
+# feature selection
 source("R/utils.R")
 outcome <- "ControlsVSatRiskNASH"
 predictors <- c(
@@ -88,6 +90,28 @@ predictors <- c(
   "Creatininemgdl",
   "eGFRCDKEPI2021"
 )
-# encapsulate feature selection in a function
+# 1) univariate plot
+# 2) feature selection
 sel.feats <- select_feats(dfC, outcome, predictors)
 print(sel.feats)
+
+# 3) fitting model
+fit.model <- classifier(df, outcome, sel.feats)
+
+# 4.1) evaluate model: ROC curve
+fig.roc <- plot.roc(fit.model, df, outcome)
+fname <- "figs/roc.pdf"
+ggplot2::ggsave(fname, fig.roc,
+  width = 4,
+  height = 3,
+  dpi = 300
+)
+
+# 4.2) evaluate model: precision-recall curve
+fig.prc <- plot.prc(fit.model, df, outcome)
+fname <- "figs/precision_recall.pdf"
+ggplot2::ggsave(fname, fig.prc,
+  width = 4,
+  height = 3,
+  dpi = 300
+)
