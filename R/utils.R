@@ -11,7 +11,7 @@ select_feats <- function(df, outcome, feats, thr = 2) {
 
   # Calculate VIF values for all features, identify the ones with VIF>2 and exclude them
   vif.val <- car::vif(model)
-  high.vif.feats <- names(vif.val[vif.val > thr])
+  high.vif.feats <- names(vif.val[vif.val < thr])
   return(high.vif.feats)
 }
 
