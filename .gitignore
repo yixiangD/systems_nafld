@@ -52,5 +52,6 @@ rsconnect/
 .DS_Store
 
 # project output
-Rplots.pdf
+Rplot*.pdf
 figs/
+
