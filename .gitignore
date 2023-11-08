@@ -54,4 +54,4 @@ rsconnect/
 # project output
 Rplot*.pdf
 figs/
-
+data
