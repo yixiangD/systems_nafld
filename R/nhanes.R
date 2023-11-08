@@ -8,7 +8,7 @@ data <- df[, !grepl("\\.", names(df))]
 # build unsupervised learning models
 col.id <- c("SEQN")
 col.lab <- c("MASLD", "Cryptogenic", "MetALD", "FIB4", "APRI", "HOMAIR", "ION", "fibrosis")
-col.bin.lab <- c("MASLD", "MetALD")
+col.bin.lab <- c("MASLD", "MetALD", "fibrosis")
 # TODO:HERE may be feature engineering to get a subset
 col.feat <- colnames(data)[!colnames(data) %in% c(col.id, col.lab)]
 
