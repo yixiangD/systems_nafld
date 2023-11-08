@@ -1,126 +1,85 @@
 library(dplyr)
-path <- "/Users/yd973/Library/CloudStorage/OneDrive-BethIsraelLaheyHealth/NAFLD/data"
+rm(list = ls())
+path <- "/Users/yd973/Library/CloudStorage/OneDrive-BethIsraelLaheyHealth/mantzoros/systems_nafld/data"
 code.path <- "/Users/yd973/Library/CloudStorage/OneDrive-BethIsraelLaheyHealth/mantzoros/systems_nafld/R"
-df <- read.csv(paste(path, "NAFLDdf.csv", sep = "/"))
+df <- read.csv(paste(path, "NewDataset for Yixiang.csv", sep = "/"), sep = ";", header = TRUE, skip = 1)
 
 #### Clinical models
-dfC <-
-  df[, c(
-    "ControlsVSatRiskNASH",
-    "Age",
-    "sex1f0m",
-    "BMIcmm2",
-    "WaistCircumferencecm",
-    "HipCircumferencecm",
-    "TOTALCHOLESTEROLmgdl",
-    "HDLmgdl",
-    "LDLmgdl",
-    "TGmgdl",
-    "ASM",
-    "SMI",
-    "SMOKE0NO1YES",
-    "centralobesity",
-    "DiabetesYES1NO0",
-    "ATPIIIMetS01",
-    "HYPERTENSIONYES1NO0",
-    "Glycemiamgdl",
-    "InsulinemiamlUml",
-    "HOMAIRvalue",
-    "ASTUIL",
-    "ALTUIL",
-    "GAMMAGTUIL",
-    "Albumingl",
-    "Plateletsx109l",
-    "Creatininemgdl",
-    "eGFRCDKEPI2021"
-  )]
+# identify feature groups
+na_count <- sapply(df, function(y) sum(length(which(is.na(y)))))
+drop <- na_count[na_count >= 0.5 * dim(df)[1] & na_count != dim(df)[1]]
 
-dfC <- dfC[complete.cases(dfC$ControlsVSatRiskNASH), ]
-non_binary_columns <-
-  c(
-    "Age",
-    "BMIcmm2",
-    "WaistCircumferencecm",
-    "HipCircumferencecm",
-    "TOTALCHOLESTEROLmgdl",
-    "HDLmgdl",
-    "LDLmgdl",
-    "TGmgdl",
-    "ASM",
-    "SMI",
-    "Glycemiamgdl",
-    "InsulinemiamlUml",
-    "HOMAIRvalue",
-    "ASTUIL",
-    "ALTUIL",
-    "GAMMAGTUIL",
-    "Albumingl",
-    "Plateletsx109l",
-    "Creatininemgdl",
-    "eGFRCDKEPI2021"
-  )
-dfC[, non_binary_columns] <-
-  lapply(dfC[, non_binary_columns], function(x) {
-    ifelse(is.na(x), mean(x, na.rm = TRUE), x)
-  })
-dfC <- na.omit(dfC)
+# find the feature cut offs
+print(na_count[na_count == dim(df)[1]])
+sectors <- which(na_count == dim(df)[1])
+outcomes <- colnames(df)[3:(sectors[1] - 1)]
+nona.outcomes <- names(na_count[na_count == 0])
+valid.outcomes <- nona.outcomes[nona.outcomes %in% outcomes]
 
+df.demo <- df[, sectors[1]:(sectors[2] - 1)]
+df.demo <- df.demo[-1]
+df.lab <- df[, sectors[2]:(sectors[3] - 1)]
+df.lab <- df.lab[-1]
+df.horm <- df[, sectors[3]:(sectors[4] - 1)]
+df.horm <- df.horm[-1]
+df.lip <- df[, sectors[4]:(sectors[5] - 1)]
+df.lip <- df.lip[-1]
+df.meta <- df[, sectors[5]:ncol(df)]
+df.meta <- df.meta[-1]
 
-outcome <- "ControlsVSatRiskNASH"
-predictors <- c(
-  "Age",
-  "sex1f0m",
-  "BMIcmm2",
-  "WaistCircumferencecm",
-  "HipCircumferencecm",
-  "TOTALCHOLESTEROLmgdl",
-  "HDLmgdl",
-  "LDLmgdl",
-  "TGmgdl",
-  "ASM",
-  "SMI",
-  "SMOKE0NO1YES",
-  "centralobesity",
-  "DiabetesYES1NO0",
-  "ATPIIIMetS01",
-  "HYPERTENSIONYES1NO0",
-  "Glycemiamgdl",
-  "InsulinemiamlUml",
-  "HOMAIRvalue",
-  "ASTUIL",
-  "ALTUIL",
-  "GAMMAGTUIL",
-  "Albumingl",
-  "Plateletsx109l",
-  "Creatininemgdl",
-  "eGFRCDKEPI2021"
-)
+opt <- "lab"
+for (opt in c("demo", "lab", "horm", "lip", "meta")) {
+  if (opt == "demo") {
+    df.local <- df.demo
+  } else if (opt == "lab") {
+    df.local <- df.lab
+  } else if (opt == "horm") {
+    df.local <- df.horm
+  } else if (opt == "lip") {
+    df.local <- df.lip
+  } else {
+    df.local <- df.meta
+  }
+}
+
 source(paste(code.path, "utils.R", sep = "/"))
-sel.feats <- select_feats(dfC, outcome, predictors)
-print(sel.feats)
+for (outcome in valid.outcomes) {
+  df.final <- cbind(df.local, df[[outcome]])
+  df.final <- df.final[apply(df.final, 1, function(x) sum(is.na(x)) <= ncol(df.final) * 0.1), ]
+  colnames(df.final)[ncol(df.final)] <- "y"
+  rownames(df.final) <- NULL
+  df.final[1:(ncol(df.final) - 1)] <- DMwR::knnImputation(df.final[1:(ncol(df.final) - 1)])
 
-dfC <- dfC[, c(outcome, sel.feats)]
-data_rows <- floor(0.80 * nrow(dfC))
-train_indices <- sample(c(1:nrow(dfC)), data_rows)
-train_data <- dfC[train_indices, ]
-test_data <- dfC[-train_indices, ]
+  predictors <- colnames(df.final)[1:(ncol(df.final) - 1)]
 
-form.string <- paste(outcome, paste(sel.feats, collapse = " + "), sep = "~")
-nn.model <- neuralnet::neuralnet(
-  as.formula(form.string),
-  data = train_data,
-  hidden = c(4, 2),
-  linear.output = FALSE
-)
+  sel.feats <- predictors
+  print(sel.feats)
 
-pred <- predict(nn.model, test_data)
-pred
-labels <- sort(unique(dfC[[outcome]]))
-prediction_label <- data.frame(max.col(pred)) %>%
-  dplyr::mutate(pred = labels[max.col.pred.] + 1) %>%
-  dplyr::select(2) %>%
-  unlist()
+  data_rows <- floor(0.80 * nrow(df.final))
+  train_indices <- sample(c(1:nrow(df.final)), data_rows)
+  train_data <- df.final[train_indices, ]
+  test_data <- df.final[-train_indices, ]
 
-table(test_data[[outcome]], prediction_label)
-res <- cbind(test_data[[outcome]], prediction_label)
-# res
+  form.string <- paste("y", paste(sel.feats, collapse = " + "), sep = "~")
+  nn.model <- neuralnet::neuralnet(
+    as.formula(form.string),
+    data = train_data,
+    hidden = c(16, 2),
+    linear.output = FALSE
+  )
+
+  pred <- predict(nn.model, test_data)
+  pred
+  labels <- sort(unique(df.final$y))
+  prediction_label <- data.frame(max.col(pred)) %>%
+    dplyr::mutate(pred = labels[max.col.pred.] + 1) %>%
+    dplyr::select(2) %>%
+    unlist()
+
+  table(test_data$y, prediction_label)
+  res <- as.data.frame(cbind(test_data$y, prediction_label))
+  colnames(res) <- c("y_true", "y_pred")
+  res.roc <- pROC::roc(res$y_true, res$y_pred)
+  print(outcome)
+  print(res.roc$auc)
+}
