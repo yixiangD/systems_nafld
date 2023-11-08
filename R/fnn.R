@@ -27,7 +27,7 @@ df.lip <- df.lip[-1]
 df.meta <- df[, sectors[5]:ncol(df)]
 df.meta <- df.meta[-1]
 
-opt <- "lab"
+opt <- "meta"
 for (opt in c("demo", "lab", "horm", "lip", "meta")) {
   if (opt == "demo") {
     df.local <- df.demo
@@ -42,44 +42,62 @@ for (opt in c("demo", "lab", "horm", "lip", "meta")) {
   }
 }
 
-source(paste(code.path, "utils.R", sep = "/"))
-for (outcome in valid.outcomes) {
+n.epoch <- 400
+b.size <- 128
+for (outcome in valid.outcomes[1]) {
   df.final <- cbind(df.local, df[[outcome]])
   df.final <- df.final[apply(df.final, 1, function(x) sum(is.na(x)) <= ncol(df.final) * 0.1), ]
   colnames(df.final)[ncol(df.final)] <- "y"
   rownames(df.final) <- NULL
   df.final[1:(ncol(df.final) - 1)] <- DMwR::knnImputation(df.final[1:(ncol(df.final) - 1)])
+  df.final[1:(ncol(df.final) - 1)] <- scale(df.final[1:(ncol(df.final) - 1)])
 
-  predictors <- colnames(df.final)[1:(ncol(df.final) - 1)]
+  # Assuming 'data' has numeric predictors and a binary factor target variable
+  data <- df.final
+  data_rows <- floor(0.8 * nrow(df.final))
+  indices <- sample(c(1:nrow(df.final)), data_rows)
+  train_data <- as.matrix(data[indices, -which(names(data) == "y")])
+  train_labels <- as.numeric(data[indices, "y"]) # Convert factor to 0/1 numeric
+  test_data <- as.matrix(data[-indices, -which(names(data) == "y")])
+  test_labels <- as.numeric(data[-indices, "y"]) # Convert factor to 0/1 numeric
 
-  sel.feats <- predictors
-  print(sel.feats)
+  # Define the model
+  model <- keras::keras_model_sequential() %>%
+    keras::layer_dense(units = 16, activation = "relu", input_shape = c(ncol(train_data))) %>%
+    keras::layer_dense(units = 16, activation = "relu") %>%
+    keras::layer_dense(units = 1, activation = "sigmoid") # output layer with 1 unit for binary classification
 
-  data_rows <- floor(0.80 * nrow(df.final))
-  train_indices <- sample(c(1:nrow(df.final)), data_rows)
-  train_data <- df.final[train_indices, ]
-  test_data <- df.final[-train_indices, ]
-
-  form.string <- paste("y", paste(sel.feats, collapse = " + "), sep = "~")
-  nn.model <- neuralnet::neuralnet(
-    as.formula(form.string),
-    data = train_data,
-    hidden = c(16, 2),
-    linear.output = FALSE
+  # Compile the model
+  model %>% keras::compile(
+    optimizer = "rmsprop",
+    loss = "binary_crossentropy",
+    metrics = c("accuracy")
   )
 
-  pred <- predict(nn.model, test_data)
-  pred
-  labels <- sort(unique(df.final$y))
-  prediction_label <- data.frame(max.col(pred)) %>%
-    dplyr::mutate(pred = labels[max.col.pred.] + 1) %>%
-    dplyr::select(2) %>%
-    unlist()
+  # Fit the model to the training data
+  history <- model %>% keras::fit(
+    train_data,
+    train_labels,
+    epochs = n.epoch,
+    batch_size = b.size,
+    validation_split = 0.2
+  )
 
-  table(test_data$y, prediction_label)
-  res <- as.data.frame(cbind(test_data$y, prediction_label))
-  colnames(res) <- c("y_true", "y_pred")
-  res.roc <- pROC::roc(res$y_true, res$y_pred)
-  print(outcome)
-  print(res.roc$auc)
+  # Evaluate the model
+  model %>% keras::evaluate(test_data, test_labels)
+
+  # Generate predictions on new data
+  predictions <- model %>% predict(train_data)
+  predicted_classes <- ifelse(predictions > 0.5, 1, 0)
+  train.accuracy <- sum(predicted_classes == train_labels) / length(train_labels)
+  print(paste0("train acc: ", train.accuracy))
+
+  predictions <- model %>% predict(test_data)
+  predicted_classes <- ifelse(predictions > 0.5, 1, 0)
+  test.accuracy <- sum(predicted_classes == test_labels) / length(test_labels)
+  print(test.accuracy)
+
+  # For more detailed performance metrics, you can use other functions like confusionMatrix from the caret package
+  test.cm <- caret::confusionMatrix(factor(predicted_classes), factor(test_labels))
+  print(test.cm)
 }
