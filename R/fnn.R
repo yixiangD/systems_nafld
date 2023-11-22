@@ -3,6 +3,7 @@ rm(list = ls())
 path <- "/Users/yd973/Library/CloudStorage/OneDrive-BethIsraelLaheyHealth/mantzoros/systems_nafld/data"
 code.path <- "/Users/yd973/Library/CloudStorage/OneDrive-BethIsraelLaheyHealth/mantzoros/systems_nafld/R"
 df <- read.csv(paste(path, "NewDataset for Yixiang.csv", sep = "/"), sep = ";", header = TRUE, skip = 1)
+colnames(df) <- gsub("rsik", "risk", colnames(df))
 
 #### Clinical models
 # identify feature groups
@@ -27,8 +28,10 @@ df.lip <- df.lip[-1]
 df.meta <- df[, sectors[5]:ncol(df)]
 df.meta <- df.meta[-1]
 
-opt <- "meta"
-for (opt in c("demo", "lab", "horm", "lip", "meta")) {
+# opts <- c("demo", "lab", "horm", "lip", "meta")
+opts <- c("all")
+
+for (opt in opts) {
   if (opt == "demo") {
     df.local <- df.demo
   } else if (opt == "lab") {
@@ -37,14 +40,19 @@ for (opt in c("demo", "lab", "horm", "lip", "meta")) {
     df.local <- df.horm
   } else if (opt == "lip") {
     df.local <- df.lip
-  } else {
+  } else if (opt == "meta") {
     df.local <- df.meta
+  } else {
+    df.local <- cbind(df.demo, df.lab, df.horm, df.lip, df.meta)
   }
 }
 
 n.epoch <- 400
-b.size <- 128
-for (outcome in valid.outcomes[1]) {
+b.size <- 64
+sel.outcomes <- c("atriskNASHvsAll")
+
+for (outcome in sel.outcomes) {
+  print(paste0("outcome: ", outcome))
   df.final <- cbind(df.local, df[[outcome]])
   df.final <- df.final[apply(df.final, 1, function(x) sum(is.na(x)) <= ncol(df.final) * 0.1), ]
   colnames(df.final)[ncol(df.final)] <- "y"
@@ -69,7 +77,7 @@ for (outcome in valid.outcomes[1]) {
 
   # Compile the model
   model %>% keras::compile(
-    optimizer = "rmsprop",
+    optimizer = keras::optimizer_adam(learning_rate = 0.001),
     loss = "binary_crossentropy",
     metrics = c("accuracy")
   )
@@ -80,6 +88,7 @@ for (outcome in valid.outcomes[1]) {
     train_labels,
     epochs = n.epoch,
     batch_size = b.size,
+    shuffle = TRUE,
     validation_split = 0.2
   )
 
@@ -95,9 +104,10 @@ for (outcome in valid.outcomes[1]) {
   predictions <- model %>% predict(test_data)
   predicted_classes <- ifelse(predictions > 0.5, 1, 0)
   test.accuracy <- sum(predicted_classes == test_labels) / length(test_labels)
-  print(test.accuracy)
+  print(paste0("test acc: ", test.accuracy))
 
   # For more detailed performance metrics, you can use other functions like confusionMatrix from the caret package
   test.cm <- caret::confusionMatrix(factor(predicted_classes), factor(test_labels))
-  print(test.cm)
+  print(test.cm$table)
+  print(test.cm$byClass)
 }
