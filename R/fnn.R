@@ -106,8 +106,10 @@ for (outcome in sel.outcomes) {
   test.accuracy <- sum(predicted_classes == test_labels) / length(test_labels)
   print(paste0("test acc: ", test.accuracy))
 
-  # For more detailed performance metrics, you can use other functions like confusionMatrix from the caret package
+  # For more detailed performance metrics,
+  # you can use other functions like confusionMatrix from the caret package
   test.cm <- caret::confusionMatrix(factor(predicted_classes), factor(test_labels))
   print(test.cm$table)
   print(test.cm$byClass)
+  print(pROC::auc(test_labels, predictions))
 }
